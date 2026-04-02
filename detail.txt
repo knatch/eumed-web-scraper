@@ -1,0 +1,388 @@
+[1m[43m[30m
+  Puppeteer old Headless deprecation warning:[0m[33m
+    In the near future `headless: true` will default to the new Headless mode
+    for Chrome instead of the old Headless implementation. For more
+    information, please see https://developer.chrome.com/articles/new-headless/.
+    Consider opting in early by passing `headless: "new"` to `puppeteer.launch()`
+    If you encounter any bugs, please report them to https://github.com/puppeteer/puppeteer/issues/new/choose.[0m
+
+Navigating to: https://ec.europa.eu/tools/eudamed/#/screen/search-eo/c9b02f67-29f8-4ee1-9968-47f12cc83a48
+
+[JSON RESPONSE] https://webtools.europa.eu/rest/requests/files?type=json&urlToRequest=https%3A%2F%2Feams.fpfis.tech.ec.europa.eu%2Fconfig%3FsiteID%3D62411771-bc96-4f7d-93c4-aad42a507531%26instance%3Dec&ref=aHR0cHM6Ly9lYy5ldXJvcGEuZXU=
+[BODY PREVIEW] {"wtstatus":{"success":true,"status":"File retrieved successfully"},"data":{"rsiteID":"62411771-bc96-4f7d-93c4-aad42a507531","siteID":"62411771-bc96-4f7d-93c4-aad42a507531","isActive":true,"trackerURL":"https:\/\/www.webanalytics.europa.eu","sitePath":["ec.europa.eu\/tools\/eudamed"],"explicit":fals
+
+Waiting for Angular bootstrap (app-root / [ng-version])...
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/assets/env-json-config.json
+[BODY PREVIEW] {
+    "modules": {
+        "core": {
+            "userDetails": "/user-details"
+        }
+    }
+}
+
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/configurationParameters?scope=PUBLIC&scope=PUBLIC_AND_PRIVATE&languageIso2Code=en
+[BODY PREVIEW] [ {
+  "name" : "ffVigilanceModule",
+  "paramValues" : null,
+  "enable" : false,
+  "description" : "Enable or Disable the full Vigilance Module",
+  "scope" : "PUBLIC_AND_PRIVATE"
+}, {
+  "name" : "ffCipsModule",
+  "paramValues" : null,
+  "enable" : false,
+  "description" : "Enable or Disable the full 
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/assets/i18n-ecl/en.json?languageIso2Code=undefined
+[BODY PREVIEW] {
+    "ecl.app-shell.ECL-APP-SHELL": "ECL Application Shell",
+    "ecl.breadcrumb.YOU-ARE-HERE": "You are here",
+    "ecl.common.BACK": "Back",
+    "ecl.common.OPEN": "Open",
+    "ecl.common.CLOSE": "Close",
+    "ecl.common.COLLAPSE": "Collapse",
+    "ecl.common.DOWNLOAD": "Download",
+    "ecl.commo
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/applicationInfo?languageIso2Code=en
+[BODY PREVIEW] {
+  "buildVersion" : "2.22.0",
+  "lastBuildDate" : "2026-01-27 09:39",
+  "activeProfile" : "[prod]"
+}
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/translationTexts/target/?target=p&language=en&languageIso2Code=undefined
+[BODY PREVIEW] {
+  "device.code-according-device-type" : "Code according to the device type",
+  "pub-general-member-state" : "Member state",
+  "pub.actor.help.search-page-rc" : "The search for economic operators allows you to search and retrieve all records that contain the search terms you enter. At least one sea
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/assets/i18n/labels/en.json?languageIso2Code=undefined
+[BODY PREVIEW] {
+    "general.title.help": "Help",
+    "device.title.certificate-information": "Certificate information",
+    "general.email": "Email",
+    "device.system-Procedure-pack-or-kit": "System/Procedure pack or kit",
+    "device.additional-product-description": "Additional Product description",
+    "devi
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/translationTexts/target/?target=a&language=en&languageIso2Code=undefined
+[BODY PREVIEW] {
+  "refdata.msu-corrective-action-type.bring-into-compliance" : "Action to bring the device into compliance",
+  "refdata.msu-device-scope-type.name" : "Name",
+  "refdata.ca-change-request-status.rejected" : "Rejected",
+  "refdata.document-type.msu-four-years-summary-report-document" : "Four years s
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/applicationInfo?languageIso2Code=en
+[BODY PREVIEW] {
+  "buildVersion" : "2.22.0",
+  "lastBuildDate" : "2026-01-27 09:39",
+  "activeProfile" : "[prod]"
+}
+
+Waiting 10s for full page render...
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/actors/c9b02f67-29f8-4ee1-9968-47f12cc83a48/publicInformation?languageIso2Code=en
+[BODY PREVIEW] {
+  "importers" : [ {
+    "relatedActorSrn" : null,
+    "relatedActorName" : null,
+    "relatedActorCountryIsoCode" : null,
+    "relatedActorCountryName" : null,
+    "relatedActorAddress" : null,
+    "relatedActorEmail" : null,
+    "relatedActorUuid" : null,
+    "relatedActorUlid" : null,
+    "relat
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/actorRelations/01FWZZMYQZ9PK4Y7B07PY3JETP/versions?languageIso2Code=en
+[BODY PREVIEW] [ {
+  "ulid" : "01FWZZMYQZ9PK4Y7B07PY3JETP",
+  "uuid" : "586c2f96-d6b2-4bcc-8eb3-ea139351317f",
+  "versionState" : {
+    "code" : "refdata.eudamed-entity-version-status.registered"
+  },
+  "lastUpdateDate" : "2024-08-29T20:21:48.724",
+  "versionNumber" : 1,
+  "latestVersion" : true
+} ]
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/actorRelations/01HV8WZRSQXQPKS0GNM5Y79DTY/versions?languageIso2Code=en
+[BODY PREVIEW] [ {
+  "ulid" : "01HV8WZRSQXQPKS0GNM5Y79DTY",
+  "uuid" : "fb4cc883-8930-48e2-a966-61cbc90c393c",
+  "versionState" : {
+    "code" : "refdata.eudamed-entity-version-status.registered"
+  },
+  "lastUpdateDate" : "2024-08-29T20:21:48.736",
+  "versionNumber" : 1,
+  "latestVersion" : true
+} ]
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/countries?languageIso2Code=en
+[BODY PREVIEW] [ {
+  "name" : "Afghanistan",
+  "type" : "NON_EU",
+  "iso2Code" : "AF",
+  "nonEUMemberState" : true
+}, {
+  "name" : "Albania",
+  "type" : "NON_EU",
+  "iso2Code" : "AL",
+  "nonEUMemberState" : true
+}, {
+  "name" : "Algeria",
+  "type" : "NON_EU",
+  "iso2Code" : "DZ",
+  "nonEUMemberState" : true
+}, {
+ 
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/eos/01ERZ25QZRY6D72VPWR7SVBNAZ/versions?languageIso2Code=en
+[BODY PREVIEW] [ {
+  "ulid" : "01ERZ25QZRY6D72VPWR7SVBNAZ",
+  "uuid" : "c9b02f67-29f8-4ee1-9968-47f12cc83a48",
+  "versionState" : {
+    "code" : "refdata.eudamed-entity-version-status.registered"
+  },
+  "lastUpdateDate" : "2024-08-29T20:21:48.573",
+  "versionNumber" : 10,
+  "latestVersion" : true
+}, {
+  "ulid" : "
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/eos/01ERZ25QZRY6D72VPWR7SVBNAZ/versions?languageIso2Code=en
+[BODY PREVIEW] [ {
+  "ulid" : "01ERZ25QZRY6D72VPWR7SVBNAZ",
+  "uuid" : "c9b02f67-29f8-4ee1-9968-47f12cc83a48",
+  "versionState" : {
+    "code" : "refdata.eudamed-entity-version-status.registered"
+  },
+  "lastUpdateDate" : "2024-08-29T20:21:48.573",
+  "versionNumber" : 10,
+  "latestVersion" : true
+}, {
+  "ulid" : "
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/eos?srn=NL-IM-000006468&languageIso2Code=en
+[BODY PREVIEW] {
+  "content" : [ {
+    "uuid" : "e834cd5e-2ff5-4b8a-99fe-1abc77a48e02",
+    "ulid" : "01F0G7NVSKE2Z2TJS8MYRWR7BW",
+    "name" : "Stryker EMEA Supply Chain Services BV",
+    "names" : {
+      "texts" : [ {
+        "language" : {
+          "isoCode" : "en",
+          "name" : "English"
+        },
+   
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/eos?srn=IE-AR-000000092&languageIso2Code=en
+[BODY PREVIEW] {
+  "content" : [ {
+    "uuid" : "db1b6ddb-c629-4388-80a0-621e2f56c48c",
+    "ulid" : "01ERFM1VJW0HP79SAM1FYWG7D1",
+    "name" : "Stryker European Operations Limited",
+    "names" : {
+      "texts" : [ {
+        "language" : {
+          "isoCode" : "en",
+          "name" : "English"
+        },
+     
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/eos?srn=IE-IM-000016335&languageIso2Code=en
+[BODY PREVIEW] {
+  "content" : [ {
+    "uuid" : "4cd09e5c-f3ca-4d83-94b3-9642fcf5dcb8",
+    "ulid" : "01FJY6060J23AGQTZ4EQEMQS49",
+    "name" : "CRITICAL HEALTHCARE LIMITED",
+    "names" : {
+      "texts" : [ {
+        "language" : {
+          "isoCode" : "en",
+          "name" : "English"
+        },
+        "text
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/actors/db1b6ddb-c629-4388-80a0-621e2f56c48c/publicInformation?languageIso2Code=en
+[BODY PREVIEW] {
+  "importers" : null,
+  "nonEuManufacturers" : [ {
+    "relatedActorSrn" : "US-MF-000025219",
+    "relatedActorName" : "Stryker Instruments",
+    "relatedActorCountryIsoCode" : "US",
+    "relatedActorCountryName" : null,
+    "relatedActorAddress" : "1941 Stryker Way 49002 Portage",
+    "relatedAct
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/actors/e834cd5e-2ff5-4b8a-99fe-1abc77a48e02/publicInformation?languageIso2Code=en
+[BODY PREVIEW] {
+  "importers" : null,
+  "nonEuManufacturers" : [ {
+    "relatedActorSrn" : "US-MF-000001796",
+    "relatedActorName" : "Statcorp Medical",
+    "relatedActorCountryIsoCode" : "US",
+    "relatedActorCountryName" : "United States",
+    "relatedActorAddress" : "35301 SE Center Street Snoqualmie",
+    
+
+[JSON RESPONSE] https://ec.europa.eu/tools/eudamed/api/actors/4cd09e5c-f3ca-4d83-94b3-9642fcf5dcb8/publicInformation?languageIso2Code=en
+[BODY PREVIEW] {
+  "importers" : null,
+  "nonEuManufacturers" : [ {
+    "relatedActorSrn" : "IN-MF-000024594",
+    "relatedActorName" : "Romsons International (Unit II)",
+    "relatedActorCountryIsoCode" : "IN",
+    "relatedActorCountryName" : "India",
+    "relatedActorAddress" : "Noida Dadri Road 59J(C) & 9, Noid
+
+=== DOM INSPECTION ===
+Title: Economic Operators > US-MF-000000290 - EUDAMED
+
+app-root innerHTML (first 1000 chars):
+<a _ngcontent-ng-c4153310043="" href="#" translate="general.accessibility.go-to-main-content" class="skip-link">Go to main content</a><eui-block-content _ngcontent-ng-c4153310043="" aria-disabled="false" class="eui-block-content"><div aria-label="eUI Block Content wrapper" role="region" class="eui-block-content__wrapper"><!----><ecl-app _ngcontent-ng-c4153310043="" dir="ltr"><ecl-site-header _ngcontent-ng-c4153310043="" _nghost-ng-c3475981069="" role="banner" class="ecl-site-header"><div _ngcontent-ng-c3475981069="" class="ecl-site-header__header"><div _ngcontent-ng-c3475981069="" class="ecl-site-header__container ecl-container"><div _ngcontent-ng-c3475981069="" class="ecl-site-header__top"><a _ngcontent-ng-c3475981069="" ecllink="" variant="standalone" class="ecl-site-header__logo-link ecl-link ecl-link--standalone" href="https://ec.europa.eu/info/index_en" aria-label="European Commission"><!----><picture _ngcontent-ng-c3475981069="" class="ecl-picture ecl-site-header__picture" title=
+
+Competent authority text matches:
+  [0] Competent Authority
+
+mat-card elements: 0
+
+mat-expansion-panel elements: 10
+  [panel 0] Version 10 (Current) Last update date: 2024-08-29 See all versions | Actor identification | Actor ID/SRN | US-MF-000000290 | Role | Manufacturer | Country | United States | Actor/Organisation name | PHYSIO-CONTROL, Inc. [EN] | Abbreviated name | - | VAT number | NL 823521 631 B01 | EORI | - | National trade register | 91-0697691 | Las
+  [panel 1] Desai Upasna
+  [panel 2] Hammes Valerio
+  [panel 3] Johanski Brian
+  [panel 4] Bodoh Matthew
+  [panel 5] IE-AR-000000092 | Actor ID/SRN | IE-AR-000000092 | Role | Authorised Representative | Country | Ireland | Organisation name | Stryker European Operations Limited [EN] | Address | Anngrove, T45 HX08, Carrigtwohill; Co. Cork | Telephone number | +353 (83) 2030261 | Email | ear.ie@stryker.com | Mandate validity dates | From 2019-09-1
+  [panel 6] IE-IM-000016335
+  [panel 7] NL-IM-000006468
+  [panel 8] Name | Health Products Regulatory Authority, Medical Devices Department | Address | Kevin O’Malley House - Earlsfort Terrace, Dublin | Country | Ireland | Email | devices@hpra.ie | Telephone number | +353 1 676 4971
+  [panel 9]  View Economic Operator devices
+
+=== FULL PAGE TEXT (first 3000 chars) ===
+An official website of the European Union
+How do you know?
+
+This site uses cookies. Visit our cookies policy page or click the link in any footer for more information and to change your preferences.
+
+Accept all cookies
+Accept only essential cookies
+Go to main content
+English
+Search
+EUDAMED - European Database on Medical Devices
+Menu
+Home
+Economic Operators
+US-MF-000000290
+ Manufacturer, US-MF-000000290, PHYSIO-CONTROL, Inc. - [United States]
+Go back to the list
+Actor information
+Version 10 (Current) Last update date: 2024-08-29 See all versions
+Actor identification
+Actor ID/SRN
+US-MF-000000290
+Role
+Manufacturer
+Country
+United States
+Actor/Organisation name
+PHYSIO-CONTROL, Inc. [EN]
+Abbreviated name
+-
+VAT number
+NL 823521 631 B01
+EORI
+-
+National trade register
+91-0697691
+Last confirmation date of actor data accuracy
+2024-08-29
+Accuracy confirmation history 
+Actor address
+Street name
+11811 Willows Road N.E.
+Street number
+-
+Address line 2
+-
+PO box
+-
+City name
+Redmond
+Postal Code
+98052
+Country
+United States
+Latitude
+-
+Longitude
+-
+Actor contact details
+Email
+SMR-EO@stryker.com
+Telephone number
++1-800-327-0770
+Web site
+www.stryker.com
+Person Responsible for Regulatory Compliance
+Desai Upasna
+Hammes Valerio
+Johanski Brian
+Bodoh Matthew
+Authorised Representative(s) mandates
+IE-AR-000000092
+Actor ID/SRN
+IE-AR-000000092
+Role
+Authorised Representative
+Country
+Ireland
+Organisation name
+Stryker European Operations Limited [EN]
+Address
+Anngrove, T45 HX08, Carrigtwohill; Co. Cork
+Telephone number
++353 (83) 2030261
+Email
+ear.ie@stryker.com
+Mandate validity dates
+From 2019-09-10 To -
+Importer(s)
+IE-IM-000016335
+NL-IM-000006468
+Competent Authority
+Name
+Health Products Regulatory Authority, Medical Devices Department
+Address
+Kevin O’Malley House - Earlsfort Terrace, Dublin
+Country
+Ireland
+Email
+devices@hpra.ie
+Telephone number
++353 1 676 4971
+Devices
+ View Economic Operator devices
+EUDAMED
+[ - ]
+Accessibility
+Contact us
+Contact EUDAMED
+About us
+About EUDAMED
+Related sites
+Medical devices
+European Commission
+Contact the European Commission
+Follow the European Commission on social media 
+Resources for partners
+Language policy
+Cookies
+Privacy policy
+Legal notice

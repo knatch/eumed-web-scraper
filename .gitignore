@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contains secrets / local overrides)
+.env
+
+# --- Output files (generated at runtime) ---
+# The output/ directory holds all generated exports and checkpoint state:
+#   staging.jsonl, progress.json, eudamed_export_*.xlsx, eudamed_export_*.csv
+output/
+
+# Safety net: catch output files placed at the project root by non-standard runs
+*.xlsx
+*.csv
+*.jsonl
+
+# Checkpoint / progress state if ever written to the project root
+progress.json
+
+# --- Log files ---
+# The logs/ directory holds errors.log (written by Winston)
+logs/
+*.log
+
+# --- Puppeteer debug dumps ---
+# Written by deviceDetailPage.js and detailPage.js during diagnostics
+*_dump.txt
+*_dump.html
+debug/
+
+# --- OS / editor artifacts ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+
+# Vim swap files
+*.swp
+*.swo
+*~
+
+# --- Node.js runtime ---
+# Lock files (package-lock.json / yarn.lock) are intentionally NOT ignored — commit them
+pids/
+*.pid
+*.seed
+*.pid.lock

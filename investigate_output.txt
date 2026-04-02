@@ -1,0 +1,162 @@
+=== EUDAMED API Investigation ===
+Timestamp: 2026-03-24T10:31:59.197Z
+
+=== PHASE 1: List page — intercepting /api/eos ===
+URL: https://ec.europa.eu/tools/eudamed/#/screen/search-eo?countryIso2Code=US&paging=%7B%22pageSize%22%3A50%2C%22pageIndex%22%3A0%7D&sorting=%7B%22sortField%22%3A%22srn%22%2C%22sortDirection%22%3A%22asc%22%7D&submitted=true
+
+  [JSON url] https://webtools.europa.eu/rest/requests/files?type=json&urlToRequest=https%3A%2F%2Feams.fpfis.tech.ec.europa.eu%2Fconfig%3FsiteID%3D62411771-bc96-4f7d-93c4-aad42a507531%26instance%3Dec&ref=aHR0cHM6Ly9lYy5ldXJvcGEuZXU=
+Page loaded. Waiting 12s for Angular + API call...
+  [JSON url] https://ec.europa.eu/tools/eudamed/assets/env-json-config.json
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/translationTexts/target/?target=a&language=en&languageIso2Code=undefined
+  [JSON url] https://ec.europa.eu/tools/eudamed/assets/i18n-ecl/en.json?languageIso2Code=undefined
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/translationTexts/target/?target=p&language=en&languageIso2Code=undefined
+  [JSON url] https://ec.europa.eu/tools/eudamed/assets/i18n/labels/en.json?languageIso2Code=undefined
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/applicationInfo?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/configurationParameters?scope=PUBLIC&scope=PUBLIC_AND_PRIVATE&languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/applicationInfo?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/countries?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/ses/competentAuthorities?notifiedBodyAndCertificate=false&languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/referenceValues?typeCode=ACTOR_TYPE&languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/countries?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/countries?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/countries?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/countries?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/eos?page=0&pageSize=50&size=50&rnd=1774348325397&sort=srn,asc&sort=versionNumber,DESC&countryIso2Code=US&languageIso2Code=en
+  [CAPTURED] /api/eos response
+
+--- /api/eos top-level keys ---
+content, pageable, last, totalElements, totalPages, size, number, sort, first, numberOfElements, empty
+
+--- Actor array wrapper key: "content" (50 actors) ---
+
+--- First 2 actor objects (full JSON) ---
+[
+  {
+    "uuid": "c9b02f67-29f8-4ee1-9968-47f12cc83a48",
+    "ulid": "01ERZ25QZRY6D72VPWR7SVBNAZ",
+    "name": "PHYSIO-CONTROL, Inc.",
+    "names": {
+      "texts": [
+        {
+          "language": {
+            "isoCode": "en",
+            "name": "English"
+          },
+          "text": "PHYSIO-CONTROL, Inc.",
+          "allLanguagesApplicable": null
+        }
+      ],
+      "textByDefaultLanguage": "PHYSIO-CONTROL, Inc."
+    },
+    "actorType": {
+      "code": "refdata.actor-type.manufacturer",
+      "srnCode": "MF",
+      "category": "ECONOMIC_ENTITY"
+    },
+    "actorStatus": {
+      "code": "refdata.actor-status.active"
+    },
+    "actorStatusFromDate": null,
+    "roleName": "Manufacturer",
+    "countryIso2Code": "US",
+    "countryName": "United States",
+    "countryType": "NON_EU",
+    "dateOfRegistration": "2020-12-16T15:27:59.664",
+    "eudamedIdentifier": "US-MF-000000290",
+    "electronicMail": "SMR-EO@stryker.com",
+    "telephone": "+1-800-327-0770",
+    "geographicalAddress": "11811 Willows Road N.E., 98052 Redmond",
+    "buildingNumber": null,
+    "streetName": null,
+    "postbox": null,
+    "addressComplement": null,
+    "postalZone": "98052",
+    "cityName": "Redmond",
+    "abbreviatedName": null,
+    "abbreviatedNames": null,
+    "latestVersion": true,
+    "versionNumber": 10,
+    "associatedToUser": false,
+    "registrationUlid": "01ERZ25R02WR5GVASV3WH6TVX7",
+    "legislationLinks": null,
+    "selectable": true,
+    "actorValidated": null,
+    "nbStatus": null,
+    "srn": "US-MF-000000290"
+  },
+  {
+    "uuid": "a01ed7c0-d264-4d3c-93dc-67e022d9e735",
+    "ulid": "01ERQSE0F5WVWJ1SS337H57Y76",
+    "name": "Microbiologics, INC.",
+    "names": {
+      "texts": [
+        {
+          "language": {
+            "isoCode": "en",
+            "name": "English"
+          },
+          "text": "Microbiologics, INC.",
+          "allLanguagesApplicable": null
+        }
+      ],
+      "textByDefaultLanguage": "Microbiologics, INC."
+    },
+    "actorType": {
+      "code": "refdata.actor-type.manufacturer",
+      "srnCode": "MF",
+      "category": "ECONOMIC_ENTITY"
+    },
+    "actorStatus": {
+      "code": "refdata.actor-status.active"
+    },
+    "actorStatusFromDate": null,
+    "roleName": "Manufacturer",
+    "countryIso2Code": "US",
+    "countryName": "United States",
+    "countryType": "NON_EU",
+    "dateOfRegistration": "2020-12-28T16:09:25.403",
+    "eudamedIdentifier": "US-MF-000000466",
+    "electronicMail": "info@microbiologics.com",
+    "telephone": "+1 320 253 7400",
+    "geographicalAddress": "Cooper Avenue North, 200 56303 Saint Cloud",
+    "buildingNumber": null,
+    "streetName": null,
+    "postbox": null,
+    "addressComplement": null,
+    "postalZone": "56303",
+    "cityName": "Saint Cloud",
+    "abbreviatedName": null,
+    "abbreviatedNames": null,
+    "latestVersion": true,
+    "versionNumber": 3,
+    "associatedToUser": false,
+    "registrationUlid": "01ERQSE0FPZPFRA92GSP2YKDTT",
+    "legislationLinks": null,
+    "selectable": true,
+    "actorValidated": null,
+    "nbStatus": null,
+    "srn": "US-MF-000000466"
+  }
+]
+
+--- UUID field value extracted: c9b02f67-29f8-4ee1-9968-47f12cc83a48 ---
+--- UUID field name search order: uuid, actorUuid, actorId, eudamedId, id, actorGuid, guid, uniqueId, eoId ---
+
+=== PHASE 2: Detail page — intercepting /api/eos/c9b02f67-29f8-4ee1-9968-47f12cc83a48 ===
+URL: https://ec.europa.eu/tools/eudamed/#/screen/search-eo/c9b02f67-29f8-4ee1-9968-47f12cc83a48
+
+Page loaded. Waiting 12s for Angular + API call...
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/actors/c9b02f67-29f8-4ee1-9968-47f12cc83a48/publicInformation?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/actorRelations/01HV8WZRSQXQPKS0GNM5Y79DTY/versions?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/actorRelations/01FWZZMYQZ9PK4Y7B07PY3JETP/versions?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/countries?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/eos/01ERZ25QZRY6D72VPWR7SVBNAZ/versions?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/eos/01ERZ25QZRY6D72VPWR7SVBNAZ/versions?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/eos?srn=IE-IM-000016335&languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/eos?srn=IE-AR-000000092&languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/eos?srn=NL-IM-000006468&languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/actors/4cd09e5c-f3ca-4d83-94b3-9642fcf5dcb8/publicInformation?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/actors/e834cd5e-2ff5-4b8a-99fe-1abc77a48e02/publicInformation?languageIso2Code=en
+  [JSON url] https://ec.europa.eu/tools/eudamed/api/actors/db1b6ddb-c629-4388-80a0-621e2f56c48c/publicInformation?languageIso2Code=en
+
+ERROR: /api/eos/{uuid} was never intercepted. See [JSON url] lines above for the actual detail API URL pattern.
