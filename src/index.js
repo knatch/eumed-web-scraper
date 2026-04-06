@@ -313,10 +313,10 @@ async function main() {
         }
 
         // After detail page, scrape device detail (reuses the same page).
-        // The page is still on the actor detail page at this point, so
-        // scrapeDeviceDetail will navigate from there to the device list/detail.
+        // Device scraping is independent of whether detail page scraping succeeded —
+        // the page is navigated back to the actor detail page explicitly below.
         let deviceDetail = null;
-        if (row.uuid && detail) {
+        if (row.uuid) {
           deviceDetail = await withRetry(
             async () => {
               page = await getOrCreatePage(browser, page);
@@ -375,6 +375,11 @@ async function main() {
           record.applicableLegislation = deviceDetail.applicableLegislation || '';
           record.riskClass = deviceDetail.riskClass || '';
           record.humanTissues = deviceDetail.humanTissues || '';
+        }
+
+        // Normalize: replace any empty-string / null / undefined field with 'N/A'
+        for (const key of Object.keys(record)) {
+          if (record[key] === '' || record[key] == null) record[key] = 'N/A';
         }
 
         // Write to workbook, CSV, and staging

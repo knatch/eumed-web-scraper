@@ -205,7 +205,7 @@ async function navigateToDetailPage(page, uuid) {
 
   let selectorFound = true;
 
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
   // Wait for Angular to render the detail content. Primary anchor is
   // #competent-authority-person; fall back to broader component selectors.

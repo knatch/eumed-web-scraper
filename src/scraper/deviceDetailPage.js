@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const config = require('../config.js');
 const logger = require('../utils/logger.js');
 
 // Debug flag — dump device detail page content only once (first device encountered)
@@ -23,15 +24,164 @@ function emptyDeviceDetail() {
 }
 
 /**
+ * Extracts a device UUID from a raw device API item object.
+ * Tries common field name variations.
+ *
+ * @param {object} item
+ * @returns {string|null}
+ */
+function _extractDeviceUuid(item) {
+  return (
+    item.uuid ||
+    item.deviceUuid ||
+    item.udiDiUuid ||
+    item.id ||
+    item.deviceId ||
+    (item.udiDi && (item.udiDi.uuid || item.udiDi.id)) ||
+    null
+  );
+}
+
+/**
+ * Extracts a risk class string from a raw device API item object.
+ * Returns empty string if not found (will be compared after DOM extraction).
+ *
+ * @param {object} item
+ * @returns {string}
+ */
+function _extractApiRiskClass(item) {
+  // Try the most common field names used across EUDAMED API responses
+  return (
+    item.riskClass ||
+    item.riskClassCode ||
+    item.riskClassName ||
+    (item.classification && (item.classification.riskClass || item.classification.name)) ||
+    ''
+  );
+}
+
+/**
+ * Fetches up to pageSize devices for the given actor UUID directly from the
+ * EUDAMED API. Returns an array of { uuid, apiRiskClass } objects.
+ *
+ * Known EUDAMED device list endpoints (tried in order):
+ *   1. /api/eos/{uuid}/devices          — confirmed for most actors
+ *   2. /api/eos/{uuid}/devices (pageIndex param variant)
+ *   3. /api/devices?actorUuid={uuid}    — alternative query-param form
+ *   4. /api/udis?manufacturerUuid={uuid} — UDI-based endpoint
+ *
+ * @param {import('puppeteer').Page} page
+ * @param {string} actorUuid
+ * @param {number} [pageSize=10]
+ * @returns {Promise<Array<{uuid: string, apiRiskClass: string}>|null>}
+ *   Array of device entries, empty array if actor has no devices, null on total failure.
+ */
+async function fetchDeviceList(page, actorUuid, pageSize = 10) {
+  const endpoints = [
+    `${config.BASE_URL}/api/eos/${actorUuid}/devices?page=0&pageSize=${pageSize}`,
+    `${config.BASE_URL}/api/eos/${actorUuid}/devices?pageIndex=0&pageSize=${pageSize}`,
+    `${config.BASE_URL}/api/devices?actorUuid=${actorUuid}&page=0&pageSize=${pageSize}`,
+    `${config.BASE_URL}/api/udis?manufacturerUuid=${actorUuid}&page=0&pageSize=${pageSize}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const result = await page.evaluate(async (fetchUrl) => {
+        try {
+          const res = await fetch(fetchUrl, { headers: { Accept: 'application/json' } });
+          if (!res.ok) return { ok: false, status: res.status, url: fetchUrl };
+          const json = await res.json();
+          return { ok: true, json, url: fetchUrl };
+        } catch (e) {
+          return { ok: false, error: e.message, url: fetchUrl };
+        }
+      }, url);
+
+      if (!result.ok) {
+        logger.info(`[device API] ${url} → status=${result.status || 'fetch-error'} (${result.error || ''})`);
+        continue;
+      }
+
+      const json = result.json;
+      logger.info(`[device API] ${url} → OK, keys=${Object.keys(json).join(',')}`);
+
+      // Extract the items array from various wrapper shapes
+      const items =
+        json.content ||
+        json.data ||
+        json.results ||
+        json.items ||
+        json.records ||
+        (Array.isArray(json) ? json : null);
+
+      if (!items || items.length === 0) {
+        logger.info(`[device API] ${url} → empty result set (totalElements=${json.totalElements ?? '?'})`);
+        // If the API says totalElements=0 this actor has no registered devices
+        if ((json.totalElements ?? json.total ?? json.count) === 0) return [];
+        continue;
+      }
+
+      // Log the first item's keys to help future debugging
+      logger.info(`[device API] First device keys: ${Object.keys(items[0]).join(', ')}`);
+
+      // Map items to { uuid, apiRiskClass } entries
+      const devices = [];
+      for (const item of items) {
+        const uuid = _extractDeviceUuid(item);
+        if (!uuid) {
+          logger.error(
+            `[device API] Could not extract UUID from device item. ` +
+            `Keys: ${Object.keys(item).join(', ')} | Raw: ${JSON.stringify(item).slice(0, 300)}`
+          );
+          continue;
+        }
+        devices.push({ uuid: String(uuid), apiRiskClass: _extractApiRiskClass(item) });
+      }
+
+      if (devices.length > 0) {
+        logger.info(
+          `[device API] Fetched ${devices.length} device(s) for actor UUID=${actorUuid} (from ${url})`
+        );
+        return devices;
+      }
+
+      // All items failed UUID extraction — fall through to next endpoint
+    } catch (err) {
+      logger.error(`[device API] Exception fetching ${url}: ${err.message}`);
+    }
+  }
+
+  logger.error(`[device API] All device list endpoints failed for actor UUID=${actorUuid}`);
+  return null;
+}
+
+/**
+ * Backwards-compatible wrapper: returns the first device UUID, or null.
+ * Used internally by scrapeDeviceDetail.
+ *
+ * @param {import('puppeteer').Page} page
+ * @param {string} actorUuid
+ * @returns {Promise<string|null>}
+ */
+async function fetchFirstDeviceUuid(page, actorUuid) {
+  const devices = await fetchDeviceList(page, actorUuid, 1);
+  if (!devices || devices.length === 0) return null;
+  return devices[0].uuid;
+}
+
+/**
  * Navigates from the current actor detail page to the first device's detail
  * page and extracts device-level fields.
  *
- * Flow:
- *   1. Find h2#devices section and click "View Economic Operator devices" link.
- *   2. On the device list page, click the first row's "View detail" button.
- *   3. On the device detail page, extract device fields via API intercept or DOM.
+ * Flow (revised — API-first, no waitForNavigation):
+ *   1. Call the EUDAMED device list API directly to get the first device's UUID.
+ *      This avoids the unreliable "click link → waitForNavigation → click View detail"
+ *      flow that fails for actors with many devices (paginated lists, Angular routing).
+ *   2. Navigate directly to the device detail page via the UUID.
+ *   3. Wait for Angular to render the device detail content.
+ *   4. Extract device fields via filtered-line innerText parsing (DOM only).
  *
- * If the actor has no devices section or link, returns empty strings for all fields.
+ * Fallback: if the API call fails, attempt the legacy DOM-click flow.
  *
  * @param {import('puppeteer').Page} page - Puppeteer page currently on the actor detail page
  * @param {string} uuid - Actor UUID (for logging)
@@ -41,379 +191,374 @@ async function scrapeDeviceDetail(page, uuid) {
   const result = emptyDeviceDetail();
 
   try {
-    // ── Step 1: Find and click the "View Economic Operator devices" link ───
+    // ── Step 1: Fetch first device UUID via API ────────────────────────────
+    logger.info(`[device] Fetching device list via API for actor UUID=${uuid}`);
+    const deviceUuid = await fetchFirstDeviceUuid(page, uuid);
+
+    if (!deviceUuid) {
+      // API exhausted — try the legacy DOM click flow as a last resort
+      logger.error(
+        `[device] API returned no device UUID for actor UUID=${uuid}. ` +
+        `Attempting legacy DOM click flow.`
+      );
+      return await _legacyDomClickFlow(page, uuid, result);
+    }
+
+    // ── Step 2: Navigate directly to the device detail page ──────────────
+    // EUDAMED device detail URL: /#/screen/search-udi-di/{deviceUuid}
+    const deviceDetailUrl = `${config.BASE_URL}/#/screen/search-udi-di/${deviceUuid}`;
+    logger.info(`[device] Navigating directly to device detail: ${deviceDetailUrl}`);
+
+    await page.goto(deviceDetailUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+    // Wait for Angular to render — the device detail page renders inside app-root.
+    // Primary anchor: 'eudamed-udi-di-details' or a heading containing "EUDAMED DI details".
+    // Fallback to broader selectors if the primary is not found.
+    await page
+      .waitForSelector(
+        [
+          'app-device-detail',
+          'app-udi-di-detail',
+          'eudamed-udi-di-details',
+          '[class*="device-detail"]',
+          'mat-tab-group',
+          'mat-card',
+          'h1', 'h2',
+        ].join(', '),
+        { timeout: 20000 }
+      )
+      .catch((err) => {
+        logger.error(
+          `[device] Device detail Angular selector not found within 20s ` +
+          `for device UUID=${deviceUuid} (actor=${uuid}): ${err.message}`
+        );
+      });
+
+    // Give Angular a moment to finish rendering all panels
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // ── Step 3: Extract device fields ─────────────────────────────────────
+    return await _extractDeviceFields(page, uuid, deviceUuid, result);
+  } catch (err) {
+    logger.error(`[device] Device detail scraping failed for actor UUID=${uuid}: ${err.message}\n${err.stack}`);
+  }
+
+  // Ensure no field is left as an empty string — use "N/A" as the fallback
+  _applyNaFallback(result);
+  return result;
+}
+
+/**
+ * Legacy DOM click flow — used only when the API-first path fails entirely.
+ *
+ * Original approach: find "View Economic Operator devices" link on the actor
+ * detail page, click it, wait for the device list table, click "View detail"
+ * on the first row, then extract fields.
+ *
+ * This flow is unreliable for actors with many devices because:
+ * - waitForNavigation does not fire for Angular client-side route changes.
+ * - The device list table selector may differ from the actor list table.
+ * - The "View detail" button aria-label may differ on the device list page.
+ *
+ * Kept as fallback so the function degrades gracefully rather than always
+ * returning N/A when the API is unavailable.
+ *
+ * @param {import('puppeteer').Page} page
+ * @param {string} uuid - Actor UUID
+ * @param {object} result - emptyDeviceDetail() object to populate
+ * @returns {Promise<object>}
+ */
+async function _legacyDomClickFlow(page, uuid, result) {
+  try {
+    // Find and click the "View Economic Operator devices" link
     const devicesLinkFound = await page.evaluate(() => {
-      // Look for h2#devices or any heading with id containing "devices"
-      const devicesHeading =
-        document.querySelector('h2#devices') ||
-        document.querySelector('[id*="devices"]') ||
-        null;
-
-      if (!devicesHeading) return false;
-
-      // Search within the devices section (heading + its siblings/parent container)
-      // for an anchor whose text matches "View Economic Operator devices"
-      const container = devicesHeading.parentElement || document.body;
-      const anchors = Array.from(container.querySelectorAll('a'));
-      const link = anchors.find((a) =>
+      const allAnchors = Array.from(document.querySelectorAll('a'));
+      const link = allAnchors.find((a) =>
         /view\s+economic\s+operator\s+devices/i.test(a.textContent)
       );
+      if (link) { link.click(); return true; }
 
-      if (!link) {
-        // Broader search: look in the entire page for the link
-        const allAnchors = Array.from(document.querySelectorAll('a'));
-        const fallbackLink = allAnchors.find((a) =>
-          /view\s+economic\s+operator\s+devices/i.test(a.textContent)
-        );
-        if (fallbackLink) {
-          fallbackLink.click();
-          return true;
-        }
-        return false;
-      }
-
-      link.click();
-      return true;
+      // Fallback: any anchor near h2#devices
+      const heading =
+        document.querySelector('h2#devices') ||
+        document.querySelector('[id*="devices"]');
+      if (!heading) return false;
+      const container = heading.parentElement || document.body;
+      const nearLink = container.querySelector('a');
+      if (nearLink) { nearLink.click(); return true; }
+      return false;
     });
 
     if (!devicesLinkFound) {
-      logger.info(`[device] No "View Economic Operator devices" link found for UUID ${uuid} — skipping device scraping`);
+      logger.error(
+        `[device] Legacy flow: No "View Economic Operator devices" link found for actor UUID=${uuid}`
+      );
+      _applyNaFallback(result);
       return result;
     }
 
-    logger.info(`[device] Clicked "View Economic Operator devices" for UUID ${uuid}`);
+    logger.info(`[device] Legacy flow: clicked "View Economic Operator devices" for UUID=${uuid}`);
 
-    // ── Step 2: Wait for device list page to load ──────────────────────────
-    // Set up API intercept for device list data
-    let interceptedDeviceList = null;
-
-    const deviceListHandler = async (response) => {
-      try {
-        const reqUrl = response.url();
-        const contentType = response.headers()['content-type'] || '';
-
-        if (!contentType.includes('application/json')) return;
-        if (reqUrl.match(/\.(js|css|woff2?|ttf|png|svg|ico)(\?|$)/)) return;
-
-        // Device list API — typically /api/devices or similar with query params
-        if (reqUrl.includes('/api/devices') && !interceptedDeviceList) {
-          const json = await response.json().catch(() => null);
-          if (json) {
-            const items = json.content || json.data || json.results || json.items ||
-              (Array.isArray(json) ? json : null);
-            if (items && items.length > 0) {
-              interceptedDeviceList = items;
-              logger.info(`[device] Intercepted device list API: ${items.length} devices. URL: ${reqUrl}`);
-            }
-          }
-        }
-      } catch (err) {
-        // Non-fatal
-      }
-    };
-
-    page.on('response', deviceListHandler);
-
-    try {
-      // Wait for navigation to device list page
-      await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {
-        // Navigation may have already completed if it was a client-side route change
-        logger.info('[device] waitForNavigation timed out — page may have already navigated');
+    // Wait up to 20s for the device list table — no waitForNavigation (Angular SPA)
+    await page
+      .waitForSelector(
+        'table tbody tr, mat-row, .no-results, [class*="no-result"]',
+        { timeout: 20000 }
+      )
+      .catch((err) => {
+        logger.error(
+          `[device] Legacy flow: device list table not found within 20s for UUID=${uuid}: ${err.message}`
+        );
       });
 
-      // Wait for either the table to render or the API intercept to fire
-      await page.waitForSelector('table tbody tr, mat-row, .no-results, [class*="no-result"]', { timeout: 20000 }).catch(() => {
-        logger.error('[device] Device list table selector not found within 20s');
-      });
+    await new Promise((r) => setTimeout(r, 1500));
 
-      // Give Angular a moment to finish rendering
-      await new Promise((r) => setTimeout(r, 2000));
-    } finally {
-      page.off('response', deviceListHandler);
-    }
-
-    // ── Step 3: Click the first row's "View detail" button ─────────────────
-    // If we got the device list from the API, we can try to extract the UUID
-    // and navigate directly. Otherwise, click the DOM button.
-    let deviceUuid = null;
-
-    if (interceptedDeviceList && interceptedDeviceList.length > 0) {
-      const firstDevice = interceptedDeviceList[0];
-      deviceUuid =
-        firstDevice.uuid ||
-        firstDevice.deviceUuid ||
-        firstDevice.deviceId ||
-        firstDevice.id ||
-        '';
-      logger.info(`[device] First device UUID from API: ${deviceUuid}`);
-    }
-
-    // NOTE: API intercept for device detail was removed — the heuristic
-    // field-name guessing was unreliable and overwrote result fields with
-    // empty strings. DOM-only extraction is used in Step 4 below.
-
-    // ── Step 3b: Click "View detail" and wait for device detail page ──────
-    // Click the "View detail" button on the first row
+    // Click "View detail" on the first row
     const clickedDetail = await page.evaluate(() => {
-      // Try table rows first
       const rows = document.querySelectorAll('table tbody tr, mat-row');
       if (rows.length === 0) return false;
-
       const firstRow = rows[0];
       const btn =
         firstRow.querySelector('button[aria-label="View detail"]') ||
-        firstRow.querySelector('button[aria-label*="detail"]') ||
-        firstRow.querySelector('button[aria-label*="Detail"]');
-
-      if (btn) {
-        btn.click();
-        return true;
-      }
-
-      // Fallback: click any anchor/button in the first row
-      const anyLink = firstRow.querySelector('a[href], button');
-      if (anyLink) {
-        anyLink.click();
-        return true;
-      }
-
+        firstRow.querySelector('button[aria-label*="detail" i]') ||
+        firstRow.querySelector('button[aria-label*="Detail" i]') ||
+        firstRow.querySelector('a[href], button');
+      if (btn) { btn.click(); return true; }
       return false;
     });
 
     if (!clickedDetail) {
-      logger.error(`[device] Could not click "View detail" on first device row for UUID ${uuid}`);
+      logger.error(
+        `[device] Legacy flow: could not click "View detail" on first device row for actor UUID=${uuid}`
+      );
+      _applyNaFallback(result);
       return result;
     }
 
-    logger.info(`[device] Clicked "View detail" on first device row`);
+    logger.info(`[device] Legacy flow: clicked "View detail", waiting for device detail page`);
 
-    // Wait for device detail page to load
-    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {
-      logger.info('[device] waitForNavigation for device detail timed out — may have already navigated');
-    });
-
-    // Wait for device detail content to render
-    await page.waitForSelector(
-      [
-        'app-device-detail',
-        'app-udi-di-detail',
-        '[class*="device-detail"]',
-        'mat-card',
-        'mat-tab-group',
-        'h1', 'h2', 'h3',
-      ].join(', '),
-      { timeout: 20000 }
-    ).catch(() => {
-      logger.error('[device] Device detail page selectors not found within 20s');
-    });
-
-    // Give Angular time to render
-    await new Promise((r) => setTimeout(r, 2000));
-
-    // ── Debug dump: capture full page content for the first device ────────
-    if (!_deviceDetailDumped) {
-      try {
-        const { innerText, innerHTML } = await page.evaluate(() => ({
-          innerText: document.body.innerText || '',
-          innerHTML: document.body.innerHTML || '',
-        }));
-        const dumpPath = path.resolve(__dirname, '../../output/device_detail_dump.txt');
-        // Also write the filtered lines array so we can verify label matching offline
-        const filteredLines = innerText
-          .split('\n')
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0);
-        const filteredSection = filteredLines
-          .map((l, i) => `[${i}] ${l}`)
-          .join('\n');
-        fs.writeFileSync(
-          dumpPath,
-          innerText +
-            '\n--- FILTERED LINES (' + filteredLines.length + ') ---\n' +
-            filteredSection +
-            '\n--- HTML ---\n' +
-            innerHTML,
-          'utf8'
-        );
-        logger.info(`[device] Debug dump written to ${dumpPath} (${filteredLines.length} filtered lines)`);
-        _deviceDetailDumped = true;
-      } catch (dumpErr) {
-        logger.error(`[device] Debug dump failed: ${dumpErr.message}`);
-      }
-    }
-
-    // ── Step 4: Extract device fields ──────────────────────────────────────
-    // DOM-only extraction via filtered line-based innerText parsing.
-    // The API intercept path has been removed — the heuristic field-name
-    // guessing was unreliable and could silently overwrite result fields
-    // with empty strings before DOM extraction ran.
-    //
-    // Strategy: split document.body.innerText into non-blank trimmed lines,
-    // find known label strings, take the value at index+1.
-    //
-    // Label matching uses multiple strategies (exact, startsWith, includes)
-    // to handle minor rendering variations across different device pages.
-    const currentUrl = page.url();
-    logger.error(`[device] About to extract device fields — current URL: ${currentUrl}`);
-    try {
-      const domDevice = await page.evaluate(() => {
-        const res = {
-          deviceName: '',
-          nomenclatureCodes: '',
-          applicableLegislation: '',
-          riskClass: '',
-          humanTissues: '',
-          _debug_lineCount: 0,
-          _debug_sampleLabels: '',
-          _debug_matchInfo: '',
-          _debug_url: window.location.href,
-        };
-
-        const rawText = document.body.innerText || '';
-        // Filter out blank lines so label is always immediately followed by value
-        const lines = rawText
-          .split('\n')
-          .map((l) => l.trim())
-          .filter((l) => l.length > 0);
-
-        res._debug_lineCount = lines.length;
-        // Capture lines around expected label positions for diagnostics
-        res._debug_sampleLabels = lines.slice(40, 55).join(' | ');
-
-        // Helper: find a label in the lines array using cascading match strategies.
-        // Returns { index, label, nextLine } or null.
-        // Strategies tried in order:
-        //   1. Exact case-insensitive match (lowercased comparison)
-        //   2. startsWith (for labels that may have trailing content)
-        //   3. includes (for labels embedded in longer text)
-        const matchLog = [];
-        function findLabel(exactText) {
-          const lower = exactText.toLowerCase();
-          // Strategy 1: exact match after lowercasing
-          for (let i = 0; i < lines.length; i++) {
-            if (lines[i].toLowerCase() === lower) {
-              matchLog.push(exactText + ':exact@' + i);
-              return { index: i, label: lines[i], nextLine: lines[i + 1] || '' };
-            }
-          }
-          // Strategy 2: startsWith
-          for (let i = 0; i < lines.length; i++) {
-            if (lines[i].toLowerCase().startsWith(lower)) {
-              matchLog.push(exactText + ':startsWith@' + i);
-              return { index: i, label: lines[i], nextLine: lines[i + 1] || '' };
-            }
-          }
-          // Strategy 3: includes
-          for (let i = 0; i < lines.length; i++) {
-            if (lines[i].toLowerCase().includes(lower)) {
-              matchLog.push(exactText + ':includes@' + i);
-              return { index: i, label: lines[i], nextLine: lines[i + 1] || '' };
-            }
-          }
-          matchLog.push(exactText + ':NOT_FOUND');
-          return null;
-        }
-
-        // -- Applicable legislation --
-        const legMatch = findLabel('Applicable legislation');
-        if (legMatch && legMatch.nextLine) {
-          res.applicableLegislation = legMatch.nextLine;
-        }
-
-        // -- Risk class --
-        const riskMatch = findLabel('Risk class');
-        if (riskMatch && riskMatch.nextLine) {
-          res.riskClass = riskMatch.nextLine;
-        }
-
-        // -- Device name --
-        const nameMatch = findLabel('Device name');
-        if (nameMatch && nameMatch.nextLine) {
-          res.deviceName = nameMatch.nextLine;
-        }
-
-        // -- Presence of human tissues or cells --
-        const tissueMatch = findLabel('Presence of human tissues or cells or their derivatives');
-        if (tissueMatch && tissueMatch.nextLine) {
-          res.humanTissues = tissueMatch.nextLine;
-        }
-
-        // -- Nomenclature code(s) — multi-line collection --
-        const nomMatch = findLabel('Nomenclature code(s)');
-        if (nomMatch) {
-          const stopLabels = [
-            'name/trade name',
-            'reference',
-            'additional',
-            'risk class',
-            'applicable legislation',
-            'presence of',
-            'implantable',
-            'measuring function',
-            'active device',
-            'certificates',
-            'udi-di details',
-            'status',
-            'device name',
-          ];
-          const values = [];
-          for (let j = nomMatch.index + 1; j < lines.length; j++) {
-            const lineLower = lines[j].toLowerCase();
-            if (stopLabels.some((sl) => lineLower === sl || lineLower.startsWith(sl))) break;
-            values.push(lines[j]);
-          }
-          res.nomenclatureCodes = values.join('\n');
-        }
-
-        res._debug_matchInfo = matchLog.join('; ');
-
-        return res;
+    // Wait for device detail content — no waitForNavigation
+    await page
+      .waitForSelector(
+        [
+          'app-device-detail',
+          'app-udi-di-detail',
+          '[class*="device-detail"]',
+          'mat-card',
+          'mat-tab-group',
+          'h1', 'h2',
+        ].join(', '),
+        { timeout: 20000 }
+      )
+      .catch((err) => {
+        logger.error(`[device] Legacy flow: device detail selectors not found within 20s: ${err.message}`);
       });
 
-      // Log diagnostics — use error level so it persists to the log file
-      logger.error(
-        `[device] DOM extraction diagnostics — UUID=${uuid} ` +
-        `url=${domDevice._debug_url}, ` +
-        `lineCount=${domDevice._debug_lineCount}, ` +
-        `matches=[${domDevice._debug_matchInfo}], ` +
-        `sampleLines=[${domDevice._debug_sampleLabels}]`
+    await new Promise((r) => setTimeout(r, 2000));
+
+    return await _extractDeviceFields(page, uuid, null, result);
+  } catch (err) {
+    logger.error(`[device] Legacy DOM click flow failed for UUID=${uuid}: ${err.message}`);
+    _applyNaFallback(result);
+    return result;
+  }
+}
+
+/**
+ * Extracts device fields from the currently rendered device detail page.
+ * Uses filtered-line innerText parsing — the same approach as Fix Pass 12/13.
+ *
+ * @param {import('puppeteer').Page} page
+ * @param {string} actorUuid - For logging
+ * @param {string|null} deviceUuid - For logging
+ * @param {object} result - emptyDeviceDetail() object to populate
+ * @returns {Promise<object>}
+ */
+async function _extractDeviceFields(page, actorUuid, deviceUuid, result) {
+  const currentUrl = page.url();
+  logger.error(
+    `[device] Extracting device fields — actorUUID=${actorUuid} deviceUUID=${deviceUuid} url=${currentUrl}`
+  );
+
+  // ── Debug dump: capture full page content for the first device ────────
+  if (!_deviceDetailDumped) {
+    try {
+      const { innerText, innerHTML } = await page.evaluate(() => ({
+        innerText: document.body.innerText || '',
+        innerHTML: document.body.innerHTML || '',
+      }));
+      const dumpPath = path.resolve(__dirname, '../../output/device_detail_dump.txt');
+      const filteredLines = innerText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      const filteredSection = filteredLines.map((l, i) => `[${i}] ${l}`).join('\n');
+      fs.writeFileSync(
+        dumpPath,
+        innerText +
+          '\n--- FILTERED LINES (' + filteredLines.length + ') ---\n' +
+          filteredSection +
+          '\n--- HTML ---\n' +
+          innerHTML,
+        'utf8'
       );
       logger.info(
-        `[device] DOM extraction result — ` +
-        `deviceName="${domDevice.deviceName}", ` +
-        `riskClass="${domDevice.riskClass}", ` +
-        `legislation="${domDevice.applicableLegislation}", ` +
-        `humanTissues="${domDevice.humanTissues}", ` +
-        `nomenclature="${domDevice.nomenclatureCodes}"`
+        `[device] Debug dump written to ${dumpPath} (${filteredLines.length} filtered lines)`
       );
-      if (!domDevice.deviceName && !domDevice.riskClass) {
-        logger.error(
-          `[device] DOM extraction returned empty for all fields for UUID=${uuid}! ` +
-          `First sample lines: ${domDevice._debug_sampleLabels}`
-        );
-      }
-
-      // Merge into result — DOM values overwrite the N/A defaults
-      if (domDevice.applicableLegislation) result.applicableLegislation = domDevice.applicableLegislation;
-      if (domDevice.riskClass) result.riskClass = domDevice.riskClass;
-      if (domDevice.deviceName) result.deviceName = domDevice.deviceName;
-      if (domDevice.humanTissues) result.humanTissues = domDevice.humanTissues;
-      if (domDevice.nomenclatureCodes) result.nomenclatureCodes = domDevice.nomenclatureCodes;
-    } catch (err) {
-      logger.error(`[device] DOM scraping for device detail failed for UUID=${uuid}: ${err.message}\n${err.stack}`);
+      _deviceDetailDumped = true;
+    } catch (dumpErr) {
+      logger.error(`[device] Debug dump failed: ${dumpErr.message}`);
     }
-  } catch (err) {
-    logger.error(`[device] Device detail scraping failed for UUID ${uuid}: ${err.message}`);
   }
 
-  // Ensure no field is left as an empty string — use "N/A" as the fallback
+  try {
+    const domDevice = await page.evaluate(() => {
+      const res = {
+        deviceName: '',
+        nomenclatureCodes: '',
+        applicableLegislation: '',
+        riskClass: '',
+        humanTissues: '',
+        _debug_lineCount: 0,
+        _debug_sampleLabels: '',
+        _debug_matchInfo: '',
+        _debug_url: window.location.href,
+      };
+
+      const rawText = document.body.innerText || '';
+      const lines = rawText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      res._debug_lineCount = lines.length;
+      res._debug_sampleLabels = lines.slice(40, 55).join(' | ');
+
+      const matchLog = [];
+      function findLabel(exactText) {
+        const lower = exactText.toLowerCase();
+        // Strategy 1: exact match
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].toLowerCase() === lower) {
+            matchLog.push(exactText + ':exact@' + i);
+            return { index: i, label: lines[i], nextLine: lines[i + 1] || '' };
+          }
+        }
+        // Strategy 2: startsWith
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].toLowerCase().startsWith(lower)) {
+            matchLog.push(exactText + ':startsWith@' + i);
+            return { index: i, label: lines[i], nextLine: lines[i + 1] || '' };
+          }
+        }
+        // Strategy 3: includes
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].toLowerCase().includes(lower)) {
+            matchLog.push(exactText + ':includes@' + i);
+            return { index: i, label: lines[i], nextLine: lines[i + 1] || '' };
+          }
+        }
+        matchLog.push(exactText + ':NOT_FOUND');
+        return null;
+      }
+
+      // -- Applicable legislation --
+      const legMatch = findLabel('Applicable legislation');
+      if (legMatch && legMatch.nextLine) res.applicableLegislation = legMatch.nextLine;
+
+      // -- Risk class --
+      const riskMatch = findLabel('Risk class');
+      if (riskMatch && riskMatch.nextLine) res.riskClass = riskMatch.nextLine;
+
+      // -- Device name --
+      const nameMatch = findLabel('Device name');
+      if (nameMatch && nameMatch.nextLine) res.deviceName = nameMatch.nextLine;
+
+      // -- Presence of human tissues or cells --
+      const tissueMatch = findLabel('Presence of human tissues or cells or their derivatives');
+      if (tissueMatch && tissueMatch.nextLine) res.humanTissues = tissueMatch.nextLine;
+
+      // -- Nomenclature code(s) — may span multiple lines --
+      const nomMatch = findLabel('Nomenclature code(s)');
+      if (nomMatch) {
+        const stopLabels = [
+          'name/trade name',
+          'reference',
+          'additional',
+          'risk class',
+          'applicable legislation',
+          'presence of',
+          'implantable',
+          'measuring function',
+          'active device',
+          'certificates',
+          'udi-di details',
+          'status',
+          'device name',
+        ];
+        const values = [];
+        for (let j = nomMatch.index + 1; j < lines.length; j++) {
+          const lineLower = lines[j].toLowerCase();
+          if (stopLabels.some((sl) => lineLower === sl || lineLower.startsWith(sl))) break;
+          values.push(lines[j]);
+        }
+        res.nomenclatureCodes = values.join('\n');
+      }
+
+      res._debug_matchInfo = matchLog.join('; ');
+      return res;
+    });
+
+    logger.error(
+      `[device] DOM extraction diagnostics — actorUUID=${actorUuid} ` +
+      `url=${domDevice._debug_url}, ` +
+      `lineCount=${domDevice._debug_lineCount}, ` +
+      `matches=[${domDevice._debug_matchInfo}], ` +
+      `sampleLines=[${domDevice._debug_sampleLabels}]`
+    );
+    logger.info(
+      `[device] DOM extraction result — ` +
+      `deviceName="${domDevice.deviceName}", ` +
+      `riskClass="${domDevice.riskClass}", ` +
+      `legislation="${domDevice.applicableLegislation}", ` +
+      `humanTissues="${domDevice.humanTissues}", ` +
+      `nomenclature="${domDevice.nomenclatureCodes}"`
+    );
+
+    if (!domDevice.deviceName && !domDevice.riskClass) {
+      logger.error(
+        `[device] DOM extraction returned empty for all fields — actorUUID=${actorUuid} ` +
+        `deviceUUID=${deviceUuid} url=${domDevice._debug_url}. ` +
+        `First sample lines: ${domDevice._debug_sampleLabels}`
+      );
+    }
+
+    if (domDevice.applicableLegislation) result.applicableLegislation = domDevice.applicableLegislation;
+    if (domDevice.riskClass) result.riskClass = domDevice.riskClass;
+    if (domDevice.deviceName) result.deviceName = domDevice.deviceName;
+    if (domDevice.humanTissues) result.humanTissues = domDevice.humanTissues;
+    if (domDevice.nomenclatureCodes) result.nomenclatureCodes = domDevice.nomenclatureCodes;
+  } catch (err) {
+    logger.error(
+      `[device] DOM extraction threw for actorUUID=${actorUuid} deviceUUID=${deviceUuid}: ` +
+      `${err.message}\n${err.stack}`
+    );
+  }
+
+  _applyNaFallback(result);
+  return result;
+}
+
+/**
+ * Replaces any empty-string field in result with 'N/A'.
+ * @param {object} result
+ */
+function _applyNaFallback(result) {
   for (const key of Object.keys(result)) {
     if (!result[key] || result[key].trim() === '') {
       result[key] = 'N/A';
     }
   }
-
-  return result;
 }
 
 module.exports = {

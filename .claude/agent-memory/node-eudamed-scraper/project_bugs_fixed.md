@@ -401,6 +401,127 @@ The endpoint `GET /api/actors/{uuid}/publicInformation?languageIso2Code=en` was 
 
 ---
 
+## Fix Pass 16 (2026-04-06) — fetchDeviceList fails all endpoints for Device-2
+
+**BUG 32 — `fetchDeviceList` (called by `scrapeDevice2Detail`) fails all four endpoints while the same function succeeds in `scrapeDeviceDetail`**
+
+Root cause: Page navigation context. In `src/index.js` the call sequence is:
+
+1. `scrapeDeviceDetail(page, uuid)` — retry wrapper navigates back to `#/screen/search-eo/{uuid}`, then `fetchFirstDeviceUuid` calls `fetchDeviceList(page, uuid, 1)` **while on the actor detail page** → succeeds. Then `page.goto(#/screen/search-udi-di/{device1Uuid})` — page is now on the Device-1 detail page.
+
+2. `scrapeDevice2Detail(page, uuid, d1RiskClass)` — retry wrapper only called `getOrCreatePage` (no navigation). So the page was still on `#/screen/search-udi-di/{device1Uuid}`. `fetchDeviceList(page, uuid, 10)` ran from this route context and EUDAMED's API rejected all four endpoint variants.
+
+The underlying mechanism: `fetchDeviceList` uses `page.evaluate(fetch(url))`. The `fetch()` runs inside the renderer for the current page. EUDAMED's Angular app uses an HTTP interceptor that injects a session-bound XSRF token into API calls. The token is tied to the Angular route context. When the page is on the device detail route, the token sent by the raw `fetch()` call (which bypasses Angular's `HttpClient`) no longer matches the server's expectation for the actor-level device list endpoints, causing 403/401 rejections.
+
+Fix: Added an explicit `page.goto(#/screen/search-eo/{uuid})` + `waitForSelector` + 2s wait inside the `scrapeDevice2Detail` retry wrapper in `src/index.js`, mirroring the identical pattern already used for `scrapeDeviceDetail`. This ensures `fetchDeviceList` always runs from the actor detail page context.
+
+File changed: `src/index.js`, inside the `withRetry` callback for `device2 ${row.srn}`.
+
+---
+
+## Fix Pass 15 (2026-04-06) — Detail page hang for records 2+ and device gate logic
+
+**BUG 30 — `navigateToDetailPage` hung on `networkidle2` for records 2+, causing all retries to exhaust and returning `null`**
+
+Root cause: `navigateToDetailPage` called `page.goto(url, { waitUntil: 'networkidle2' })`. After `scrapeDeviceDetail` navigated the page through 2-3 Angular route changes (device list → device detail), the browser's internal connection pool was in a state where the next `networkidle2` never resolved on the same page object. Puppeteer waited the full 60-second timeout, threw, and all 3 retries consumed 3×60s each before `withRetry` returned `null`.
+
+Records 1 detail: succeeded because the page had never been through device scraping yet.
+Record 2 detail: hung on `networkidle2` after record 1's device navigation left the page in a degraded state.
+Records 3+ detail: same issue, compounded.
+
+Fix: Changed `waitUntil: 'networkidle2'` to `waitUntil: 'domcontentloaded'` in `navigateToDetailPage`. The Angular render wait and `fetchPublicInformation` API call do not require full network idle — `domcontentloaded` is sufficient to establish the browser session context for the same-origin API `fetch()`.
+
+File changed: `src/scraper/detailPage.js`, line 208.
+
+**BUG 31 — Device scraping skipped for ALL records where detail page returned null**
+
+Root cause: `index.js` gated device scraping on `if (row.uuid && detail)`. When `detail` was `null` (due to BUG 30), device scraping was silently skipped. Device scraping navigates back to the actor detail page explicitly — it does not depend on `detail` being non-null.
+
+Fix: Changed gate to `if (row.uuid)` so device scraping runs independently of whether detail page extraction succeeded.
+
+File changed: `src/index.js`, line 319.
+
+**Effect:** BUG 31 was a downstream symptom of BUG 30. With BUG 30 fixed, records 2+ will get correct detail data and device scraping will also run. The BUG 31 fix is a belt-and-suspenders improvement — device scraping now runs even on the edge case where detail extraction fails.
+
+---
+
+---
+
+## Fix Pass 16 (2026-04-06) — Device detail: replace click-nav flow with direct API + direct URL navigation
+
+**BUG 32 — Empty device columns for actors with many devices (e.g. MX-MF-000015841, 297 devices)**
+
+Root cause (three compounding failures):
+
+1. **`waitForNavigation` never fires for Angular client-side routing.**
+   The old flow clicked "View Economic Operator devices" then called `page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 })`. For an Angular SPA, the route change is handled internally by the Angular router — no browser-level navigation event is emitted. `waitForNavigation` waited the full 30s, logged "may have already navigated", and continued. 30 seconds wasted per actor.
+
+2. **Device list API intercept pattern `/api/devices` never matched.**
+   The real EUDAMED device list endpoint is `/api/eos/{actorUuid}/devices` (not `/api/devices`). The `deviceListHandler` therefore never set `interceptedDeviceList`, so the API shortcut path was dead. The code fell through to DOM button-click, which also failed.
+
+3. **After the 30s navigation timeout, the device list table may not have rendered.**
+   `waitForSelector('table tbody tr, mat-row, ...')` fired with a 20s timeout. If the Angular device list page was still rendering (or if the Angular route never fully changed), the selector timed out. `clickedDetail` then ran `document.querySelectorAll('table tbody tr, mat-row')` — found 0 rows — returned `false`. The function returned `emptyDeviceDetail()` with all N/A. No `logger.error()` was fired at the critical failure point (devicesLinkFound returned false), only `logger.info()` — so failures were invisible in errors.log.
+
+**Evidence from `output/device_detail_dump.txt`:**
+The dump (written on first device ever scraped = MX-MF-000013827) shows the scraper DID reach a valid device detail page. The filtered-line content at lines [43],[51],[65],[68],[99] contains exactly the labels the extractor looks for. So extraction works when the page is correct — the failure was always in navigation, not extraction.
+
+**Fix applied to `src/scraper/deviceDetailPage.js`:**
+
+1. **Replaced the entire link-click → waitForNavigation → click-View-detail flow** with a direct API call:
+   ```
+   fetchFirstDeviceUuid(actorUuid) tries in order:
+     /api/eos/{uuid}/devices?page=0&pageSize=1
+     /api/eos/{uuid}/devices?pageIndex=0&pageSize=1
+     /api/devices?actorUuid={uuid}&page=0&pageSize=1
+     /api/udis?manufacturerUuid={uuid}&page=0&pageSize=1
+   ```
+   Each endpoint is called via `page.evaluate(fetch(...))` (piggybacks browser session/cookies).
+   The first device UUID is extracted from `content`, `data`, `results`, `items`, `records`, or the root array.
+
+2. **Navigation replaced with direct URL**: once the device UUID is known, navigate directly to:
+   `/#/screen/search-udi-di/{deviceUuid}`
+   This is the confirmed EUDAMED device detail URL (from `device_detail_dump.txt` — the dump was captured from a page at this path).
+
+3. **`waitForNavigation` removed entirely.** Angular route changes don't emit browser navigation events. The wait strategy is now: `page.goto(deviceDetailUrl, { waitUntil: 'domcontentloaded' })` then `waitForSelector(angular-content-selectors, { timeout: 20000 })`.
+
+4. **All failure points now log at `logger.error()`** so they appear in `logs/errors.log`:
+   - API returned no device UUID
+   - Each individual API endpoint status code / fetch error
+   - Device list selector not found
+   - DOM extraction returned empty for all fields
+   - Legacy click flow failure points
+
+5. **Legacy DOM click flow preserved** as `_legacyDomClickFlow()`, called only when ALL API endpoints return nothing. Belt-and-suspenders.
+
+6. **Extraction logic refactored into `_extractDeviceFields()`** so both the API-first path and the legacy path share identical extraction code. No duplication.
+
+**Device detail URL confirmed:** `/#/screen/search-udi-di/{deviceUuid}` — from dump captured for device `07503048701760` (actor MX-MF-000013827).
+
+**Device list API endpoint:** `/api/eos/{actorUuid}/devices` is the most likely correct form (tried first). The `pageSize=1` limit ensures minimal data transfer.
+
+---
+
+---
+
+## Feature: Device-2 columns (2026-04-06)
+
+**Added 5 new Device-2 columns** to the output (Excel + CSV).
+
+**Selection rule:** Device-2 is the first device (among up to 10 fetched from the device list API) whose DOM-extracted Risk Class differs from Device-1's. If no such device exists, or the actor has only 1 device, all Device-2 fields are `"N/A"`.
+
+**Implementation:**
+- `fetchDeviceList(page, actorUuid, pageSize=10)` replaces the old `fetchFirstDeviceUuid` wrapper (which now calls `fetchDeviceList` with `pageSize=1` for backwards compat). Returns `Array<{uuid, apiRiskClass}>` | `[]` (no devices) | `null` (API failure).
+- `emptyDevice2Detail()` returns all 5 device2 fields as `"N/A"`.
+- `_extractDevice2Fields(page, actorUuid, deviceUuid)` navigates to `/#/screen/search-udi-di/{deviceUuid}` and runs the same filtered-line extraction as `_extractDeviceFields`, mapping results into `device2*` keys.
+- `scrapeDevice2Detail(page, actorUuid, device1RiskClass)` — orchestrates: fetch list, skip index 0, compare risk class (API fast-path, then DOM confirmation), return first differing device's fields.
+- Device-2 scraping gate in `index.js`: `if (row.uuid && deviceDetail)` — Device-2 requires Device-1 to have succeeded (we need `d1RiskClass` to compare).
+
+**Column names (record keys):** `device2Name`, `device2NomenclatureCodes`, `device2ApplicableLegislation`, `device2RiskClass`, `device2HumanTissues`.
+
+**Excel headers:** `Device-2 Name`, `Device-2 Nomenclature Code(s)`, `Device-2 Applicable Legislation`, `Device-2 Risk Class`, `Device-2 Human Tissues/Cells`.
+
+---
+
 **How to apply:** When modifying scraper navigation or interception logic, always verify:
 1. `DETAIL_BASE_URL` is `https://ec.europa.eu/tools/eudamed/#/screen/search-eo` (not `#/screen/actor`)
 2. `isActorsList` in listPage.js matches `/api/eos` (not `/actors`)
@@ -412,3 +533,47 @@ The endpoint `GET /api/actors/{uuid}/publicInformation?languageIso2Code=en` was 
 8. `page` must be `let` in index.js (not `const`) so `getOrCreatePage` can reassign it on session-closed errors
 9. DOM extraction primary strategy is `dl > dt + dd` pairs inside `heading + div` sections — never use leaf-node scanning as primary
 10. Merge logic: API is authoritative for AR/Importer/CA/email/phone/actorAddress; DOM is authoritative for website; DOM fills gaps for all others
+11. `navigateToDetailPage` MUST use `waitUntil: 'domcontentloaded'` (not `networkidle2`). After device scraping navigates through 2-3 Angular routes, `networkidle2` never resolves on the same page object — it will hang for the full 60s timeout on every retry.
+12. Device scraping gate in `index.js` must be `if (row.uuid)` — NOT `if (row.uuid && detail)`. Device scraping navigates back to the actor page explicitly and is independent of whether detail extraction succeeded.
+13. Device detail navigation: NEVER use `waitForNavigation` for Angular route changes. Always use `page.goto(directUrl)` + `waitForSelector(content)`. The device detail URL is `/#/screen/search-udi-di/{deviceUuid}`.
+14. Device list API: `/api/eos/{actorUuid}/devices?page=0&pageSize=1` — NOT `/api/devices`. The intercept pattern `/api/devices` in the old code was wrong and never fired.
+15. Device-2 scraping gate in `index.js` must be `if (row.uuid && deviceDetail)` — needs Device-1's risk class to compare. If Device-1 failed, Device-2 stays N/A.
+16. `d1RiskClass` passed to `scrapeDevice2Detail` must be `''` (not `'N/A'`) when Device-1 extraction failed. Use `(deviceDetail.riskClass === 'N/A') ? '' : deviceDetail.riskClass`. Passing `'N/A'` as d1RiskClass causes the D2 skip guard to misfire — see Fix Pass 17.
+17. The Device-2 skip guard must NOT treat `d2RiskNorm === 'n/a'` as a reason to skip candidates. Only skip when both d1 and d2 risk classes are known non-N/A strings and they match exactly. Skipping on 'n/a' discards every candidate when DOM extraction fails — see Fix Pass 17.
+
+---
+
+## Fix Pass 17 (2026-04-06) — Device-2 fields always N/A: two bugs in d1RiskClass handling and skip guard
+
+**BUG 33 — `d1RiskClass` passed as `'N/A'` instead of `''` when Device-1 risk class extraction failed**
+
+Root cause (`src/index.js` line 362, pre-fix):
+```js
+const d1RiskClass = deviceDetail.riskClass || 'N/A';
+```
+`scrapeDeviceDetail` always calls `_applyNaFallback(result)` before returning, which converts any empty-string field to `'N/A'`. So `deviceDetail.riskClass` is either a real value or `'N/A'` — never `''`. The `|| 'N/A'` fallback therefore never changed anything, and `'N/A'` was always passed to `scrapeDevice2Detail` when extraction failed.
+
+Fix:
+```js
+const d1RiskClass = (deviceDetail.riskClass === 'N/A') ? '' : (deviceDetail.riskClass || '');
+```
+
+**BUG 34 — Skip guard in `scrapeDevice2Detail` discarded every candidate when their DOM extraction returned 'N/A'**
+
+Root cause (`src/scraper/deviceDetailPage.js` line 801, pre-fix):
+```js
+if (d2RiskNorm === 'n/a' || d2RiskNorm === '') {
+  continue;  // skip this candidate
+}
+```
+When `_extractDevice2Fields` fails to render the Angular device detail page, it returns `device2RiskClass: 'N/A'` (via `emptyDevice2Detail()`). The guard then skips every single candidate, causing `scrapeDevice2Detail` to always fall through to `return emptyDevice2Detail()` — all Device-2 fields N/A.
+
+Fix: Only skip when BOTH risk classes are known non-empty non-N/A strings and they match:
+```js
+if (d1RiskNorm && d2RiskNorm && d2RiskNorm !== 'n/a' && d2RiskNorm === d1RiskNorm) {
+  continue;  // positively same risk class — skip
+}
+// d2 extraction failed or risk class unknown: use this device as Device-2
+```
+
+**Effect:** When DOM extraction fails for Device-2 candidates, the function now uses the first available Device-2 candidate instead of returning all N/A. This is the correct "best effort" behavior — some Device-2 fields may still be N/A if extraction fails, but the row will not be silently empty.
