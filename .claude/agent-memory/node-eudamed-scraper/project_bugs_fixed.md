@@ -345,14 +345,70 @@ Possible causes under investigation:
 
 ---
 
+---
+
+## Fix Pass 14 (2026-04-04) — AR and Importer replaced with direct API call to /publicInformation
+
+**CHANGE — Replaced DOM-scraping for AR/Importer with direct `publicInformation` API call**
+
+The endpoint `GET /api/actors/{uuid}/publicInformation?languageIso2Code=en` was confirmed live and returns ALL fields needed for AR, Importer, CA, actorAddress, email, phone, and website in a single call.
+
+**Confirmed API response structure (2026-04-04, UUID `1ef1bf51-8416-46a7-9d80-9f037bad0946`):**
+```
+{
+  importers: [{
+    relatedActorName: string|null,    // prefer this
+    relatedActorEmail: string|null,   // prefer this
+    actor: {
+      name: string,                   // fallback
+      electronicMail: string,         // fallback
+    }
+  }],
+  actorDataPublicView: {
+    electronicMail: string,
+    telephone: string|null,
+    website: string|null,             // often null even when page shows one — always supplement with DOM
+    actorAddress: {
+      streetName, buildingNumber, complement, cityName, postalZone,
+      country: { name, iso2Code }
+    },
+    authorisedRepresentatives: [{
+      name: string,
+      email: string,
+      telephone: string|null,
+      address: string,
+      countryName: string,
+    }],
+    validatorName: string,            // CA name
+    validatorAddress: { streetName, buildingNumber, cityName, postalZone, country: { name, iso2Code } },
+    validatorEmail: string,
+    validatorTelephone: string,
+  }
+}
+```
+
+**Implementation changes to `src/scraper/detailPage.js`:**
+1. Removed response intercept (`page.on('response', responseHandler)`) — no longer needed.
+2. Added `fetchPublicInformation(page, uuid)` — calls API via `page.evaluate(fetch(...))` to piggyback browser session.
+3. Added `parsePublicInformation(json)` — maps confirmed field names to detail record fields.
+4. First API call saves raw JSON to `output/api_response_sample.json`.
+5. `navigateToDetailPage` now: navigates to page, waits for Angular render, then calls API directly.
+6. Removed `_detailDumped` HTML/text dump code (`detail_dump_text.txt`, `detail_dump_html.txt`).
+7. DOM scraping still runs for ALL fields — API values take priority, DOM fills gaps. Website always taken from DOM (API website field is frequently null).
+8. Merge strategy: API → DOM fallback for all fields except website (DOM always wins for website).
+
+**Importer field note:** `relatedActorName`/`relatedActorEmail` are null when the importer is not registered in EUDAMED as a separate actor. In that case fall back to `importers[0].actor.name` and `.electronicMail`.
+
+---
+
 **How to apply:** When modifying scraper navigation or interception logic, always verify:
 1. `DETAIL_BASE_URL` is `https://ec.europa.eu/tools/eudamed/#/screen/search-eo` (not `#/screen/actor`)
 2. `isActorsList` in listPage.js matches `/api/eos` (not `/actors`)
-3. `isActorDetailPath` in detailPage.js matches `/api/eos/{uuid}` (not `/api/actors/` + `/publicInformation`)
+3. AR, Importer, CA fields come from `/api/actors/{uuid}/publicInformation` — NOT from the old `/api/eos/{uuid}` endpoint
 4. The call site in `index.js` uses the return value of `navigateToDetailPage` directly (not a second call to `extractDetailData`)
-5. CA, AR, Importer, Website fields are NOT reliably in API response — extract from DOM only
+5. Website is NOT reliably in `/publicInformation` API — always supplement with DOM
 6. `extractDetailData` must NOT return early after API extraction — DOM scraping must always run
 7. Angular bootstrap is confirmed with `app-root, [ng-version]` — never assume `domcontentloaded` means Angular is ready
 8. `page` must be `let` in index.js (not `const`) so `getOrCreatePage` can reassign it on session-closed errors
 9. DOM extraction primary strategy is `dl > dt + dd` pairs inside `heading + div` sections — never use leaf-node scanning as primary
-10. Merge logic for DOM-authoritative fields must assign directly (`detail.x = domData.x`), not conditionally (`if (!detail.x)`)
+10. Merge logic: API is authoritative for AR/Importer/CA/email/phone/actorAddress; DOM is authoritative for website; DOM fills gaps for all others

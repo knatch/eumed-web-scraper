@@ -17,6 +17,9 @@ const config = {
   MAX_RETRIES: Number(process.env.MAX_RETRIES) || 3,
   CHECKPOINT_INTERVAL: Number(process.env.CHECKPOINT_INTERVAL) || 50,
   LOG_FILE: process.env.LOG_FILE || './logs/errors.log',
+  // How long (ms) to wait for Angular to fully render the detail page content.
+  // Increase this if detail pages are scraped before field data appears in the DOM.
+  RENDER_TIMEOUT_MS: Number(process.env.RENDER_TIMEOUT_MS) || 15000,
   CSV_FILE: process.env.CSV_FILE || `./output/eudamed_export_${countryCode}.csv`,
 };
 
